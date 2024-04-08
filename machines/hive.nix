@@ -1,11 +1,22 @@
-{
+let
+  # To get the latest commit hash and the sha:
+  # nix-prefetch-url --unpack https://github.com/nixos/nixpkgs/archive/$(git ls-remote https://github.com/nixos/nixpkgs nixos-23.11 | cut -f1).tar.gz
+  nixos_23_11 = builtins.fetchTarball {
+    name = "nixos-23.11-2024-04-08";
+    url = "https://github.com/nixos/nixpkgs/archive/e38d7cb66ea4f7a0eb6681920615dfcc30fc2920.tar.gz"; 
+    sha256 = "1shml3mf52smfra0x3mpfixddr4krp3n78fc2sv07ghiphn22k43";
+  };
+in {
   meta = {
     # Override to pin the Nixpkgs version (recommended). This option
     # accepts one of the following:
     # - A path to a Nixpkgs checkout
     # - The Nixpkgs lambda (e.g., import <nixpkgs>)
     # - An initialized Nixpkgs attribute set
-    nixpkgs = import <nixpkgs> { system = "x86_64-linux"; };
+    nixpkgs = (import nixos_23_11) {
+      system = "x86_64-linux";
+      config.allowUnfree = true;
+    };
 
     # You can also override Nixpkgs by node!
     # nodeNixpkgs = {
@@ -24,12 +35,13 @@
 
   defaults = { pkgs, ... }: {
     # This module will be imported by all hosts
+    nixpkgs.overlays = [ (import ./overlays.nix) ];
 
     # Bootloader.
     boot.loader.systemd-boot.enable = true;
     boot.loader.efi.canTouchEfiVariables = true;
 
-    networking.hostName = "nixos"; # Define your hostname.
+    networking.hostName = "metal-nina"; # Define your hostname.
     # networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
 
     # Configure network proxy if necessary
@@ -88,18 +100,15 @@
     security.pam.enableSSHAgentAuth = true;
     security.pam.services.sudo.sshAgentAuth = true;
 
-    # Allow unfree packages
-    nixpkgs.config.allowUnfree = true;
-
     # List packages installed in system profile. To search, run:
     # $ nix search wget
     environment.systemPackages = with pkgs; [
-      vim # Do not forget to add an editor to edit configuration.nix! The Nano editor is also installed by default.
+      vim
       curl
       dig
+      inetutils
       btop
       cloudflared
-    #  wget
     ];
 
     # nixpkgs.overlays = [ (self: super: {
@@ -148,10 +157,10 @@
     services.openssh.enable = true;
 
     # Open ports in the firewall.
-    networking.firewall.allowedTCPPorts = [ 22 ];
+    networking.firewall.allowedTCPPorts = [ 22 10250 ];
     # networking.firewall.allowedUDPPorts = [ ... ];
     # Or disable the firewall altogether.
-    # networking.firewall.enable = false;
+    networking.firewall.enable = false;
 
     # By default, Colmena will replace unknown remote profile
     # (unknown means the profile isn't in the nix store on the
@@ -170,7 +179,7 @@
     # Like NixOps and morph, Colmena will attempt to connect to
     # the remote host using the attribute name by default. You
     # can override it like:
-    deployment.targetHost = "192.168.23.48";
+    deployment.targetHost = "metal-1.loran.dev";
     deployment.targetUser = "gustav";
     deployment.buildOnTarget = true;
 
@@ -194,7 +203,13 @@
     deployment.keys."cloudflared-credentials.secret" = {
       # Alternatively, `text` (string) or `keyFile` (path to file)
       # may be specified.
-      keyFile = ./gustav/cloudflared-2023.10.0;
+      # keyFile = ./gustav/cloudflared-2023.10.0;
+      keyCommand = [
+        "op"
+        "inject"
+        "-i"
+        "./gustav/cloudflared-2023.10.0.tpl"
+      ];
 
       destDir = "/secrets/cloudflared/";
       user = "cloudflared";
@@ -210,7 +225,7 @@
     # time.timeZone = nodes.host-b.config.time.timeZone;
 
     imports = [
-      ./gustav/hardware-configuration.nix
+      ./gustav/definition.nix
     ];
     #
     # fileSystems."/" = {

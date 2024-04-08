@@ -15,17 +15,17 @@ cleanup() {
 bailout() {
   echo "🔥 Error, deleting temp directory" 2>&1
 
-  cleanup()
+  cleanup
 }
 
-trap 'bailout' ERR
+trap 'bailout' SIGINT SIGTERM ERR
 
 # OnePassword injections
 op inject \
-  -i ../../machines/gustav/cloudflared-2023.10.0.tpl \
+  -i ./machines/gustav/cloudflared-2023.10.0.tpl \
   -o ${TMP_DIR}/cloudflared-2023.10.0
 
-pushd "../../machines"
+pushd "./machines"
   nix-shell -p colmena --run "colmena apply"
 popd
 
