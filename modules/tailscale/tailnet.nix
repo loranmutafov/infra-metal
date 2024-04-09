@@ -1,6 +1,7 @@
 { config, pkgs, ... }: {
   environment.systemPackages = [ pkgs.tailscale ];
 
+  # https://github.com/NixOS/nixpkgs/blob/nixos-23.11/nixos/modules/services/networking/tailscale.nix
   services.tailscale = {
     enable = true;
     openFirewall = true;
@@ -16,8 +17,8 @@
     ];
 
     destDir = "/secrets/tailscale/";
-    user = "tailscale";
-    group = "tailscale";
+    #user = "tailscaled";
+    #group = "tailscaled";
     permissions = "0600";
 
     uploadAt = "pre-activation";

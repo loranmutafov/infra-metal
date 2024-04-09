@@ -1,6 +1,7 @@
 let
   # To get the latest commit hash and the sha:
   # nix-prefetch-url --unpack https://github.com/nixos/nixpkgs/archive/$(git ls-remote https://github.com/nixos/nixpkgs nixos-23.11 | cut -f1).tar.gz
+  # https://nora.codes/post/pinning-nixpkgs-with-morph-and-colmena/
   nixos_23_11 = builtins.fetchTarball {
     name = "nixos-23.11-2024-04-08";
     url = "https://github.com/nixos/nixpkgs/archive/e38d7cb66ea4f7a0eb6681920615dfcc30fc2920.tar.gz"; 
@@ -52,7 +53,7 @@ in {
     networking.networkmanager.enable = true;
 
     # Set your time zone.
-    time.timeZone = "Europe/London";
+    time.timeZone = "Europe/Sofia";
 
     # Select internationalisation properties.
     i18n.defaultLocale = "en_GB.UTF-8";
@@ -79,9 +80,9 @@ in {
     console.keyMap = "uk";
 
     # Define a user account. Don't forget to set a password with ‘passwd’.
-    users.users.gustav = {
+    users.users.loran = {
       isNormalUser = true;
-      description = "Gustav";
+      description = "Loran";
       extraGroups = [ "networkmanager" "wheel" ];
       packages = with pkgs; [];
       openssh.authorizedKeys.keys = [
@@ -174,13 +175,13 @@ in {
   };
 
   oxymoron = { name, nodes, ... }: {
-    time.timeZone = "Europe/London";
+    time.timeZone = "Europe/Sofia";
 
     # Like NixOps and morph, Colmena will attempt to connect to
     # the remote host using the attribute name by default. You
     # can override it like:
     deployment.targetHost = "metal-1.loran.dev";
-    deployment.targetUser = "gustav";
+    deployment.targetUser = "loran";
     deployment.buildOnTarget = true;
 
     services.cloudflared = {
