@@ -174,13 +174,13 @@ in {
     # deployment.replaceUnknownProfiles = true;
   };
 
-  oxymoron = { name, nodes, ... }: {
+  metal-nina = { name, nodes, ... }: {
     time.timeZone = "Europe/Sofia";
 
     # Like NixOps and morph, Colmena will attempt to connect to
     # the remote host using the attribute name by default. You
     # can override it like:
-    deployment.targetHost = "metal-1.loran.dev";
+    deployment.targetHost = "metal-nina";
     deployment.targetUser = "loran";
     deployment.buildOnTarget = true;
 

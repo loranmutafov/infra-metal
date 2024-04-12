@@ -17,8 +17,6 @@
     ];
 
     destDir = "/secrets/tailscale/";
-    #user = "tailscaled";
-    #group = "tailscaled";
     permissions = "0600";
 
     uploadAt = "pre-activation";

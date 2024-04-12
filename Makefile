@@ -8,4 +8,4 @@ deploy-manual:
 		nix-shell -p colmena --run "colmena apply" && \
 	popd
 
-deploy: deploy-manual
+deploy: deploy-script
