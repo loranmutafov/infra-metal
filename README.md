@@ -78,7 +78,7 @@ From your machine, get your public key and add it to the clipboard (assuming mac
 ssh-add -L | pbcopy
 ```
 
-Assuming the machine is currently on `192.168.0.10`, ssh into it with agent forwarding
+Assuming the machine is currently on `192.168.0.10`, ssh into it
 ```shell
 ssh YOUR_USER@192.168.0.10
 ```
