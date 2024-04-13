@@ -138,5 +138,11 @@ Now that the manual steps are out of the way, I'd add the machine under `/machin
 2. connects to Tailscale
 3. and executes `colmena apply`
 
+From this point on, deploying changes is as simple as modifying the nix configuration on my machine, and executing:
+
+```shell
+make deploy
+```
+
 # Licence
 Infra-Metal is distributed under the [BSD 3-Clause Licence](https://github.com/loranmutafov/infra-metal/blob/main/LICENCE).
