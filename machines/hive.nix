@@ -42,7 +42,6 @@ in {
     boot.loader.systemd-boot.enable = true;
     boot.loader.efi.canTouchEfiVariables = true;
 
-    networking.hostName = "metal-nina"; # Define your hostname.
     # networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
 
     # Configure network proxy if necessary
@@ -132,7 +131,7 @@ in {
     #     {
     #       "hostname": "vpc1.royal.technology",
     #       "originRequest":{},
-    #       "path":"gustav",
+    #       "path":"nina",
     #       "service":"ssh://localhost:22"
     #     },
     #     {
@@ -204,12 +203,12 @@ in {
     deployment.keys."cloudflared-credentials.secret" = {
       # Alternatively, `text` (string) or `keyFile` (path to file)
       # may be specified.
-      # keyFile = ./gustav/cloudflared-2023.10.0;
+      # keyFile = ./metal-nina/cloudflared-2023.10.0;
       keyCommand = [
         "op"
         "inject"
         "-i"
-        "./gustav/cloudflared-2023.10.0.tpl"
+        "./metal-nina/cloudflared-2023.10.0.tpl"
       ];
 
       destDir = "/secrets/cloudflared/";
@@ -222,21 +221,12 @@ in {
 
     # The name and nodes parameters are supported in Colmena,
     # allowing you to reference configurations in other nodes.
-    # networking.hostName = name;
+    networking.hostName = name;
     # time.timeZone = nodes.host-b.config.time.timeZone;
 
     imports = [
-      ./gustav/definition.nix
+      ./metal-nina/definition.nix
     ];
-    #
-    # fileSystems."/" = {
-    #   device = "/dev/disk/by-uuid/59ec8017-87b9-40e8-8f19-d5615e2740d2"; # "/dev/nvme0n1p3";
-    #   fsType = "ext4";
-    # };
-    # fileSystems."/boot" = {
-    #   device = "/dev/disk/by-uuid/CC8A-21AF"; # "/dev/nvme0n1p1";
-    #   fsType = "vfat";
-    # };
 
     # This value determines the NixOS release from which the default
     # settings for stateful data, like file locations and database versions
@@ -247,32 +237,64 @@ in {
     system.stateVersion = "23.11"; # Did you read the comment?
   };
 
-  # host-b = {
-  #   time.timeZone = "Europe/London";
-  #   # Like NixOps and morph, Colmena will attempt to connect to
-  #   # the remote host using the attribute name by default. You
-  #   # can override it like:
-  #   deployment.targetHost = "host-b.mydomain.tld";
+  metal-100yan = { name, nodes, ... }: {
+    time.timeZone = "Europe/Sofia";
 
-  #   # It's also possible to override the target SSH port.
-  #   # For further customization, use the SSH_CONFIG_FILE
-  #   # environment variable to specify a ssh_config file.
-  #   deployment.targetPort = 22;
+    # Like NixOps and morph, Colmena will attempt to connect to
+    # the remote host using the attribute name by default. You
+    # can override it like:
+    deployment.targetHost = "192.168.8.106";
+    deployment.targetUser = "loran";
+    deployment.buildOnTarget = true;
 
-  #   # Override the default for this target host
-  #   deployment.replaceUnknownProfiles = false;
+    services.cloudflared = {
+      enable = true;
+      tunnels = {
+        "a1b3b7f8-8ed5-4881-9fe2-46767dcd74b6" = {
+          credentialsFile = "/secrets/cloudflared/cloudflared-credentials.secret";
+          default = "http_status:404";
 
-  #   # You can filter hosts by tags with --on @tag-a,@tag-b.
-  #   # In this example, you can deploy to hosts with the "web" tag using:
-  #   #    colmena apply --on @web
-  #   # You can use globs in tag matching as well:
-  #   #    colmena apply --on '@infra-*'
-  #   deployment.tags = [ "web" "infra-lax" ];
+          ingress = {
+            "metal-100yan.loran.dev" = {
+              service = "ssh://localhost:22";
+              path = "";
+            };
+          };
+        };
+      };
+    };
 
-  #   boot.loader.grub.device = "/dev/nvme0n1";
-  #   fileSystems."/" = {
-  #     device = "/dev/nvme0n1p3";
-  #     fsType = "ext4";
-  #   };
-  # };
+    deployment.keys."cloudflared-credentials.secret" = {
+      keyCommand = [
+        "op"
+        "inject"
+        "-i"
+        "./metal-100yan/cloudflared-2023.10.0.tpl"
+      ];
+
+      destDir = "/secrets/cloudflared/";
+      user = "cloudflared";
+      group = "cloudflared";
+      permissions = "0600";
+
+      uploadAt = "pre-activation"; # Default: pre-activation, Alternative: post-activation
+    };
+
+    # The name and nodes parameters are supported in Colmena,
+    # allowing you to reference configurations in other nodes.
+    networking.hostName = name;
+    # time.timeZone = nodes.host-b.config.time.timeZone;
+
+    imports = [
+      ./metal-100yan/definition.nix
+    ];
+
+    # This value determines the NixOS release from which the default
+    # settings for stateful data, like file locations and database versions
+    # on your system were taken. It‘s perfectly fine and recommended to leave
+    # this value at the release version of the first install of this system.
+    # Before changing this value read the documentation for this option
+    # (e.g. man configuration.nix or on https://nixos.org/nixos/options.html).
+    system.stateVersion = "23.11"; # Did you read the comment?
+  };
 }
