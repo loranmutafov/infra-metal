@@ -1,11 +1,16 @@
-.PHONY: deploy-script deploy-manual deploy
+.PHONY: deploy deployon deploy-nina deploy-eli deploy-100yan
 
-deploy-script:
+deploy:
 	./ops/scripts/deploy.sh
 
-deploy-manual:
-	pushd "./machines" && \
-		nix-shell -p colmena --run "colmena apply" && \
-	popd
+deployon:
+	./ops/scripts/deploy.sh "--on $(filter-out $@,$(MAKECMDGOALS))"
 
-deploy: deploy-script
+deploy-nina:
+	./ops/scripts/deploy.sh "--on metal-nina"
+
+deploy-eli:
+	./ops/scripts/deploy.sh "--on metal-eli"
+
+deploy-100yan:
+	./ops/scripts/deploy.sh "--on metal-100yan"

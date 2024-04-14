@@ -73,7 +73,7 @@ echo "🚀 Deploying machines"
 echo
 
 pushd "./machines" > /dev/null
-  nix-shell -p colmena --run "colmena apply"
+  nix-shell -p colmena --run "colmena apply $@"
 popd
 
 cleanup
