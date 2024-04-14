@@ -1,11 +1,12 @@
 let
   # To get the latest commit hash and the sha:
+  # nix-shell -p
   # nix-prefetch-url --unpack https://github.com/nixos/nixpkgs/archive/$(git ls-remote https://github.com/nixos/nixpkgs nixos-23.11 | cut -f1).tar.gz
   # https://nora.codes/post/pinning-nixpkgs-with-morph-and-colmena/
   nixos_23_11 = builtins.fetchTarball {
-    name = "nixos-23.11-2024-04-08";
-    url = "https://github.com/nixos/nixpkgs/archive/e38d7cb66ea4f7a0eb6681920615dfcc30fc2920.tar.gz"; 
-    sha256 = "1shml3mf52smfra0x3mpfixddr4krp3n78fc2sv07ghiphn22k43";
+    name = "nixos-23.11-2024-04-14";
+    url = "https://github.com/nixos/nixpkgs/archive/51651a540816273b67bc4dedea2d37d116c5f7fe.tar.gz";
+    sha256 = "1f7d0blzwqcrvz94yj1whlnfibi5m6wzx0jqfn640xm5h9bwbm3r";
   };
 in {
   meta = {
@@ -243,7 +244,7 @@ in {
     # Like NixOps and morph, Colmena will attempt to connect to
     # the remote host using the attribute name by default. You
     # can override it like:
-    deployment.targetHost = "192.168.8.106";
+    deployment.targetHost = "metal-100yan";
     deployment.targetUser = "loran";
     deployment.buildOnTarget = true;
 
@@ -287,6 +288,67 @@ in {
 
     imports = [
       ./metal-100yan/definition.nix
+    ];
+
+    # This value determines the NixOS release from which the default
+    # settings for stateful data, like file locations and database versions
+    # on your system were taken. It‘s perfectly fine and recommended to leave
+    # this value at the release version of the first install of this system.
+    # Before changing this value read the documentation for this option
+    # (e.g. man configuration.nix or on https://nixos.org/nixos/options.html).
+    system.stateVersion = "23.11"; # Did you read the comment?
+  };
+
+  metal-eli = { name, nodes, ... }: {
+    time.timeZone = "Europe/Sofia";
+
+    # Like NixOps and morph, Colmena will attempt to connect to
+    # the remote host using the attribute name by default. You
+    # can override it like:
+    deployment.targetHost = "metal-eli";
+    deployment.targetUser = "loran";
+    deployment.buildOnTarget = true;
+
+    services.cloudflared = {
+      enable = true;
+      tunnels = {
+        "a1b3b7f8-8ed5-4881-9fe2-46767dcd74b6" = {
+          credentialsFile = "/secrets/cloudflared/cloudflared-credentials.secret";
+          default = "http_status:404";
+
+          ingress = {
+            "metal-eli.loran.dev" = {
+              service = "ssh://localhost:22";
+              path = "";
+            };
+          };
+        };
+      };
+    };
+
+    deployment.keys."cloudflared-credentials.secret" = {
+      keyCommand = [
+        "op"
+        "inject"
+        "-i"
+        "./metal-eli/cloudflared-2023.10.0.tpl"
+      ];
+
+      destDir = "/secrets/cloudflared/";
+      user = "cloudflared";
+      group = "cloudflared";
+      permissions = "0600";
+
+      uploadAt = "pre-activation"; # Default: pre-activation, Alternative: post-activation
+    };
+
+    # The name and nodes parameters are supported in Colmena,
+    # allowing you to reference configurations in other nodes.
+    networking.hostName = name;
+    # time.timeZone = nodes.host-b.config.time.timeZone;
+
+    imports = [
+      ./metal-eli/definition.nix
     ];
 
     # This value determines the NixOS release from which the default
