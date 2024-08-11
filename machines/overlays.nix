@@ -3,9 +3,13 @@ final: prev:
 let
   # master = import (builtins.fetchTarball "https://github.com/NixOS/nixpkgs/archive/master.tar.gz") pkgs-config;
   # unstable = import (builtins.fetchTarball "https://github.com/NixOS/nixpkgs/archive/unstable.tar.gz") pkgs-config;
-  pkgsWithKubernetes119 = import (
+  pkgsWithKubernetes123 = import (
     builtins.fetchTarball
-    "https://github.com/NixOS/nixpkgs/archive/5c1ffb7a9fc96f2d64ed3523c2bdd379bdb7b471.tar.gz"
+    "https://github.com/NixOS/nixpkgs/archive/7592790b9e02f7f99ddcb1bd33fd44ff8df6a9a7.tar.gz"
+  ) pkgs-config;
+  pkgsWithKubernetes126 = import (
+    builtins.fetchTarball
+    "https://github.com/NixOS/nixpkgs/archive/1b7a6a6e57661d7d4e0775658930059b77ce94a4.tar.gz"
   ) pkgs-config;
 
   # pkgsWithKubernetes119 = import (builtins.fetchGit {
@@ -22,5 +26,6 @@ let
   };
 in
 {
-  kubernetes_1_19 = pkgsWithKubernetes119.kubernetes;
+  kubernetes_1_23 = pkgsWithKubernetes123.kubernetes;
+  kubernetes_1_26 = pkgsWithKubernetes126.kubernetes;
 }

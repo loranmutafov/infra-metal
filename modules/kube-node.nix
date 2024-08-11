@@ -1,5 +1,6 @@
 { config, lib, pkgs, ... }:
 let
+  kubeletNodeIP = null;
   kubeMasterIP = "95.111.244.161";
   kubeMasterHostname = "kubernetes.default";
   kubeMasterAPIServerPort = 6443;
@@ -15,7 +16,7 @@ in
   environment.systemPackages = with pkgs; [
     # kompose
     # kubectl
-    kubernetes_1_19
+    kubernetes_1_26
     cri-tools
     ethtool
     socat
@@ -38,8 +39,12 @@ in
     # use coredns
     addons.dns.enable = true;
     flannel.enable = false;
-    proxy.enable = true;
+    proxy.enable = false;
     easyCerts = false;
+
+    # kubelet = {
+    #   verbosity = 3;
+    # };
 
     caFile = ../certs/kubernetes-ca.pem;
     # kubelet.hostname = "metal-1.loran.dev";
