@@ -1,33 +1,75 @@
-{ config, pkgs, ... }: {
-  environment.systemPackages = [ pkgs.tailscale ];
+{ config, pkgs, name, config, ... }:
+let
+  bind = name;
+  cfg = config.reaVaultNode;
+in
+{
+  options.reaVaultNode = {
+    enable = mkOption {
+      type = types.bool;
+      default = false;
+    }
+  }
 
-  services.tailscale.enable = true;
+  config = mkIf cfg.enable {
+    services.vault = {
+      enable = true;
+      storageBackend = "raft";
 
-  # Authenticate to Tailscale
-  systemd.services.tailscale-autoconnect = {
-    description = "Automatic connection to Tailscale";
+      storageConfig = ./vault-raft.conf
+      address = "${bind}:8200"
+      extraConfig = ''
+        cluster_name = "Rea's Metal Vault"
 
-    # make sure tailscale is running before trying to connect to tailscale 🧠
-    after = [ "network-pre.target" "tailscale.service" ];
-    wants = [ "network-pre.target" "tailscale.service" ];
-    wantedBy = [ "multi-user.target" ];
+        api_addr = "https://${bind}:8200"
+        cluster_addr = "https://${bind}:8201"
+        ui = true
 
-    # set this service as a oneshot job
-    serviceConfig.Type = "oneshot";
+        disable_mlock = true
+        telemetry {
+          # at /v1/sys/metrics
+          disable_hostname = true
+        }
+      '';
 
-    # have the job run this shell script
-    script = with pkgs; ''
-      # wait for tailscaled to settle
-      sleep 2
+      tlsKeyFile = "/opt/vault/tls/vault-key.rsa";
+      tlsCertFile = "/opt/vault/tls/vault-ca.pem";
+      listenerExtraConfig = ''
+        # for checking client, not mandatory
+        tls_client_ca_file = "/opt/vault/tls/vault-ca.pem"
+        cluster_address = "${bind}:8201"
+      '';
+    };
 
-      # check if we are already authenticated to tailscale
-      status="$(${tailscale}/bin/tailscale status -json | ${jq}/bin/jq -r .BackendState)"
-      if [ $status = "Running" ]; then # if so, then do nothing
-        exit 0
-      fi
+    deployment.keys."vault-key.rsa" = {
+      keyFile = secretPath + "/pki/vault/key.rsa";
+      destDir = "/opt/vault/tls";
+      user = "root";
+      group = "vault";
+      permissions = "0640"
+    };
+    deployment.keys."vault-cert.pem" = {
+      keyFile = secretPath + "/pki/vault/mesh-cert-chain.pem";
+      destDir = "/opt/vault/tls";
+      user = "root";
+      group = "root";
+      permissions = "0644";
+    };
+    deployment.keys."vault-ca.pem" = {
+      keyFile = secretPath + "/pki/vault/mesh-ca.pem";
+      destDir = "/opt/vault/tls";
+      user = "root";
+      group = "root";
+      permissions = "0644";
+    };
 
-      # otherwise authenticate with tailscale
-      ${tailscale}/bin/tailscale up -authkey file:/etc/tailscale/tailscale.key
-    '';
-  };
+    systemd.services.vault = {
+      partOf = {
+        "vault-key.pem.service"
+        "vault-cert.pem.service"
+        "vault-ca.pem.service"
+      };
+      after = [ "tailscale-autoconnect" ]
+    }
+  }
 }
