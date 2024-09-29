@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, flakeInputs, ... }:
 let
   kubeletNodeIP = null;
   kubeMasterIP = "95.111.244.161";
@@ -16,7 +16,7 @@ in
   environment.systemPackages = with pkgs; [
     # kompose
     # kubectl
-    kubernetes_1_26
+    flakeInputs.self.packages.kubernetes_1_26
     cri-tools
     ethtool
     socat
