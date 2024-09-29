@@ -1,17 +1,4 @@
-inputs@{ nixpkgs, utils, ... }: 
-let
-  mkNodePool = { tags ? [ ], names, imports, ... }: builtins.listToAttrs (builtins.map
-    (name: rec {
-      inherit name;
-      value = { ... }: {
-        inherit imports;
-        deployment.tags = tags;
-        deployment.targetHost = "${name}.vps.dcotta.com";
-      };
-    })
-    names
-  );
-in {
+inputs@{ nixpkgs, utils, ... }: {
   meta = {
     # Override to pin the Nixpkgs version (recommended). This option
     # accepts one of the following:
