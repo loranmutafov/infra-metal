@@ -25,7 +25,7 @@ inputs@{ nixpkgs, utils, ... }: {
     # machinesFile = ./machines.client-a;
   };
 
-  defaults = { pkgs, lib, name, ... }: {
+  defaults = { name, lib, ... }: {
     # This module will be imported by all hosts
     # nixpkgs.overlays = [ (import ./overlays.nix) ];
     imports = [

@@ -42,6 +42,7 @@ else
 fi
 
 GIT_REV=$(git rev-parse --short=8 HEAD)
+TMPDIR=/private/tmp
 TMP_DIR=$(mktemp -d -t infra-metal-$GIT_REV.XXXXXXXX)
 
 cleanup() {
@@ -73,7 +74,7 @@ echo "🚀 Deploying machines"
 echo
 
 pushd "./machines" > /dev/null
-  nix-shell -p colmena --run "colmena apply $@"
+  nix-shell -p colmena --run "colmena --show-trace apply $@"
 popd
 
 cleanup
