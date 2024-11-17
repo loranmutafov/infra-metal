@@ -16,4 +16,6 @@
 
     uploadAt = "pre-activation";
   };
+
+  systemd.services.tailscaled.after = ["NetworkManager-wait-online.service"];
 }
