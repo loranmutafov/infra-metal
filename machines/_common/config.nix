@@ -32,7 +32,7 @@
   # Enable sudo logins if the user’s SSH agent provides a key present in
   # ~/.ssh/authorized_keys. This allows machines to exclusively use SSH
   # keys instead of passwords.
-  security.pam.enableSSHAgentAuth = true;
+  security.pam.sshAgentAuth.enable = true;
   security.pam.services.sudo.sshAgentAuth = true;
 
   # Bootloader.
@@ -60,9 +60,9 @@
   };
 
   # Configure keymap in X11
-  services.xserver = {
+  services.xserver.xkb = {
     layout = "gb";
-    xkbVariant = "";
+    variant = "";
   };
 
   # Configure console keymap
@@ -82,7 +82,7 @@
   services.openssh.enable = true;
 
   # Open ports in the firewall.
-  networking.firewall.allowedTCPPorts = [ 22 10250 ];
+  networking.firewall.allowedTCPPorts = [ 22 10250 8200 8201 ];
   # networking.firewall.allowedUDPPorts = [ ... ];
   # Or disable the firewall altogether.
   networking.firewall.enable = false;

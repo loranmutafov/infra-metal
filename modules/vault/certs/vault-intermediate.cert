@@ -1,1 +1,3 @@
-op://Rea Cluster/Intermediate CA vault.rea.loran.dev/vault.metal.loran.dev-cert.pem
+{{ op://Rea Cluster/Intermediate CA - Metal Vault of Rea/vault.rea.loran.dev.cert }}
+
+{{ op://Rea Cluster/Root CA - Rea on Metal/rea-metal-root-ca.cert }}

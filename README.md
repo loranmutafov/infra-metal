@@ -97,7 +97,7 @@ openssh.authorizedKeys.keys = [
 
 Then allow sudo via agent forwarding via this key, adding the following lines:
 ```nix
-security.pam.enableSSHAgentAuth = true;
+security.pam.sshAgentAuth.enable = true;
 security.pam.services.sudo.sshAgentAuth = true;
 ```
 

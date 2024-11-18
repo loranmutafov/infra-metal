@@ -74,7 +74,7 @@ echo "🚀 Deploying machines"
 echo
 
 pushd "./machines" > /dev/null
-  nix-shell -p colmena --run "colmena --show-trace apply $@"
+  nix-shell -p colmena --run "colmena apply --show-trace $@"
 popd
 
 cleanup

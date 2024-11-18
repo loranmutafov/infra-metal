@@ -5,4 +5,8 @@
   ];
 
   time.timeZone = "Europe/Sofia";
+
+  reaVaultNode = {
+    enable = true;
+  };
 }

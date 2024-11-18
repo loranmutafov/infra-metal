@@ -7,10 +7,10 @@ deployon:
 	./ops/scripts/deploy.sh "--on $(filter-out $@,$(MAKECMDGOALS))"
 
 deploy-nina:
-	./ops/scripts/deploy.sh "--on metal-nina"
+	./ops/scripts/deploy.sh "--on metal-nina $(filter-out $@,$(MAKECMDGOALS))"
 
 deploy-eli:
-	./ops/scripts/deploy.sh "--on metal-eli"
+	./ops/scripts/deploy.sh "--on metal-eli $(filter-out $@,$(MAKECMDGOALS))"
 
 deploy-100yan:
-	./ops/scripts/deploy.sh "--on metal-100yan"
+	./ops/scripts/deploy.sh "--on metal-100yan $(filter-out $@,$(MAKECMDGOALS))"
