@@ -2,17 +2,35 @@
 
 function read_input {
   local prompt="$1"
+  local default="$2"
   local input
 
+  if [ -n "$default" ]; then
+    prompt="$prompt [$default]"
+  fi
+
   read -r -p "$prompt: " input
+  if [ -z "$input" ]; then
+    input="$default"
+  fi
+
   echo "$input"
 }
 
 function read_path_input {
   local prompt="$1"
+  local default="$2"
   local input
 
+  if [ -n "$default" ]; then
+    prompt="$prompt [$default]"
+  fi
+
   read -e -p "$prompt: " input
+  if [ -z "$input" ]; then
+    input="$default"
+  fi
+
   realpath $(eval echo $input)
 }
 
