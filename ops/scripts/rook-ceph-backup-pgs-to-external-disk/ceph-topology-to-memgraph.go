@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -11,6 +12,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
+
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
 
 type PGObjectPair struct {
@@ -20,18 +24,313 @@ type PGObjectPair struct {
 
 type ObjectData []interface{}
 
+// MemgraphClient wraps the driver and session for reuse
+type MemgraphClient struct {
+	driver  neo4j.DriverWithContext
+	session neo4j.SessionWithContext
+	logger  *log.Logger
+}
+
+func NewMemgraphClient(address, username, password string, logger *log.Logger) (*MemgraphClient, error) {
+	logger.Printf("Connecting to Memgraph at %s", address)
+	fmt.Printf("Connecting to Memgraph at %s\n", address)
+
+	uri := fmt.Sprintf("bolt://%s", address)
+
+	auth := neo4j.NoAuth()
+	if username != "" {
+		auth = neo4j.BasicAuth(username, password, "")
+	}
+
+	driver, err := neo4j.NewDriverWithContext(uri, auth, func(config *neo4j.Config) {
+		config.MaxConnectionLifetime = 30 * time.Minute
+		config.MaxConnectionPoolSize = 50
+		config.ConnectionAcquisitionTimeout = 2 * time.Minute
+		// Enable keep-alive for long-lived connections
+		config.SocketKeepalive = true
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create driver: %v", err)
+	}
+
+	// Create a long-lived session with write access
+	session := driver.NewSession(context.Background(), neo4j.SessionConfig{
+		AccessMode: neo4j.AccessModeWrite,
+	})
+
+	client := &MemgraphClient{
+		driver:  driver,
+		session: session,
+		logger:  logger,
+	}
+
+	return client, nil
+}
+
+func (mc *MemgraphClient) Close(ctx context.Context) error {
+	if mc.session != nil {
+		mc.session.Close(ctx)
+	}
+	if mc.driver != nil {
+		return mc.driver.Close(ctx)
+	}
+	return nil
+}
+
+func (mc *MemgraphClient) TestConnection(ctx context.Context) error {
+	mc.logger.Println("Testing Memgraph connection...")
+	fmt.Println("Testing Memgraph connection...")
+
+	// Test basic connectivity
+	result, err := mc.session.Run(ctx, "RETURN 'Connection successful' as message", nil)
+	if err != nil {
+		return fmt.Errorf("failed to test connection: %v", err)
+	}
+
+	if result.Next(ctx) {
+		record := result.Record()
+		message, _ := record.Get("message")
+		mc.logger.Printf("Connection test result: %v", message)
+		fmt.Printf("Connection test result: %v\n", message)
+	}
+
+	if err := result.Err(); err != nil {
+		return fmt.Errorf("error in connection test: %v", err)
+	}
+
+	mc.logger.Println("Memgraph connection OK")
+	fmt.Println("Memgraph connection OK")
+	return nil
+}
+
+func (mc *MemgraphClient) CreateOSDNode(ctx context.Context, osdID string) error {
+	mc.logger.Printf("Creating OSD node for ID %s", osdID)
+	fmt.Printf("Creating OSD node for ID %s\n", osdID)
+
+	query := `
+		MERGE (o:OSD {id: $osd_id})
+		ON CREATE SET
+			o.created_at = timestamp(),
+			o.name = $osd_name
+		RETURN o.id as id, o.name as name
+	`
+
+	params := map[string]interface{}{
+		"osd_id":   osdID,
+		"osd_name": fmt.Sprintf("osd-%s", osdID),
+	}
+
+	result, err := mc.session.Run(ctx, query, params)
+	if err != nil {
+		return fmt.Errorf("failed to create OSD node: %v", err)
+	}
+
+	if result.Next(ctx) {
+		record := result.Record()
+		id, _ := record.Get("id")
+		name, _ := record.Get("name")
+		mc.logger.Printf("Created OSD node: id=%v, name=%v", id, name)
+		fmt.Printf("Created OSD node: id=%v, name=%v\n", id, name)
+	}
+
+	if err := result.Err(); err != nil {
+		return fmt.Errorf("error creating OSD node: %v", err)
+	}
+
+	fmt.Println("OSD node created successfully")
+	return nil
+}
+
+func (mc *MemgraphClient) ProcessPGObjects(ctx context.Context, pairs []PGObjectPair, osdID string) error {
+	for i, pair := range pairs {
+		mc.logger.Printf("Processing PG %d/%d: %s", i+1, len(pairs), pair.PGID)
+		fmt.Printf("Processing PG %d/%d: %s with %d objects\n", i+1, len(pairs), pair.PGID, len(pair.Objects))
+
+		if err := mc.processSinglePG(ctx, pair, osdID); err != nil {
+			return fmt.Errorf("failed to process PG %s: %v", pair.PGID, err)
+		}
+	}
+	return nil
+}
+
+func (mc *MemgraphClient) processSinglePG(ctx context.Context, pair PGObjectPair, osdID string) error {
+	// Create PG node and relationship to OSD
+	pgQuery := `
+		MATCH (o:OSD {id: $osd_id})
+		MERGE (p:PG {id: $pg_id})
+		ON CREATE SET
+			p.created_at = timestamp(),
+			p.name = $pg_name
+		MERGE (o)-[:CONTAINS]->(p)
+		RETURN p.id as pg_id, p.name as pg_name
+	`
+
+	pgParams := map[string]interface{}{
+		"osd_id":  osdID,
+		"pg_id":   pair.PGID,
+		"pg_name": fmt.Sprintf("PG %s", pair.PGID),
+	}
+
+	result, err := mc.session.Run(ctx, pgQuery, pgParams)
+	if err != nil {
+		return fmt.Errorf("failed to create PG node: %v", err)
+	}
+
+	if result.Next(ctx) {
+		record := result.Record()
+		pgID, _ := record.Get("pg_id")
+		pgName, _ := record.Get("pg_name")
+		mc.logger.Printf("Created PG node: id=%v, name=%v", pgID, pgName)
+	}
+
+	if err := result.Err(); err != nil {
+		return fmt.Errorf("error creating PG node: %v", err)
+	}
+
+	// Process objects in batches
+	const batchSize = 100
+	for i := 0; i < len(pair.Objects); i += batchSize {
+		end := i + batchSize
+		if end > len(pair.Objects) {
+			end = len(pair.Objects)
+		}
+
+		batch := pair.Objects[i:end]
+		if err := mc.processBatchObjects(ctx, batch, pair.PGID, osdID); err != nil {
+			return fmt.Errorf("failed to process batch %d-%d for PG %s: %v", i, end, pair.PGID, err)
+		}
+
+		fmt.Printf("Processed batch %d-%d (%d objects) for PG %s\n", i, end, len(batch), pair.PGID)
+	}
+
+	mc.logger.Printf("Successfully processed %d objects for PG %s", len(pair.Objects), pair.PGID)
+	return nil
+}
+
+func (mc *MemgraphClient) processBatchObjects(ctx context.Context, objects []string, pgID, osdID string) error {
+	// Use a write transaction for the entire batch
+	_, err := mc.session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (interface{}, error) {
+		for _, objectName := range objects {
+			if objectName == "" {
+				continue
+			}
+
+			query := `
+				MATCH (o:OSD {id: $osd_id}) 
+				MATCH (p:PG {id: $pg_id})
+				MERGE (b:Object {id: $object_id})-[:IS]->(ub:UniqueObject {id: $unique_object_id})
+				ON CREATE SET 
+					b.created_at = timestamp(), 
+					b.name = $object_name,
+					ub.created_at = timestamp(), 
+					ub.name = $unique_object_name
+				MERGE (o)-[:CONTAINS]->(ub)
+				MERGE (p)-[:CONTAINS]->(ub)
+				MERGE (p)-[:CONTAINS]->(b)
+			`
+
+			params := map[string]interface{}{
+				"osd_id":             osdID,
+				"pg_id":              pgID,
+				"object_id":          objectName,
+				"unique_object_id":   fmt.Sprintf("%s-%s", osdID, objectName),
+				"object_name":        fmt.Sprintf("Obj %s", objectName),
+				"unique_object_name": fmt.Sprintf("[%s] Obj %s", osdID, objectName),
+			}
+
+			_, err := tx.Run(ctx, query, params)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create object %s: %v", objectName, err)
+			}
+
+			fmt.Printf("Created object: %s in PG: %s\n", objectName, pgID)
+		}
+
+		return nil, nil
+	})
+
+	mc.logger.Printf("Created %d objects in PG %s", len(objects), pgID)
+
+	return err
+}
+
+func (mc *MemgraphClient) CreateSnapshot(ctx context.Context) error {
+	mc.logger.Println("Creating snapshot...")
+	fmt.Println("Creating snapshot...")
+
+	result, err := mc.session.Run(ctx, "CALL mg.create_snapshot()", nil)
+	if err != nil {
+		return fmt.Errorf("failed to create snapshot: %v", err)
+	}
+
+	// Consume any results
+	for result.Next(ctx) {
+		// Process snapshot result if any
+	}
+
+	if err := result.Err(); err != nil {
+		return fmt.Errorf("error creating snapshot: %v", err)
+	}
+
+	mc.logger.Println("Snapshot created successfully")
+	fmt.Println("Snapshot created successfully")
+	return nil
+}
+
+// GetStats returns database statistics for monitoring
+func (mc *MemgraphClient) GetStats(ctx context.Context) error {
+	queries := []struct {
+		name  string
+		query string
+	}{
+		{"OSD Count", "MATCH (o:OSD) RETURN count(o) as count"},
+		{"PG Count", "MATCH (p:PG) RETURN count(p) as count"},
+		{"Object Count", "MATCH (obj:Object) RETURN count(obj) as count"},
+		{"UniqueObject Count", "MATCH (uo:UniqueObject) RETURN count(uo) as count"},
+		{"Relationship Count", "MATCH ()-[r]->() RETURN count(r) as count"},
+	}
+
+	fmt.Println("\n=== Database Statistics ===")
+	mc.logger.Println("Database Statistics:")
+
+	for _, q := range queries {
+		result, err := mc.session.Run(ctx, q.query, nil)
+		if err != nil {
+			mc.logger.Printf("Error getting %s: %v", q.name, err)
+			continue
+		}
+
+		if result.Next(ctx) {
+			record := result.Record()
+			count, _ := record.Get("count")
+			fmt.Printf("%s: %v\n", q.name, count)
+			mc.logger.Printf("%s: %v", q.name, count)
+		}
+
+		if err := result.Err(); err != nil {
+			mc.logger.Printf("Error in %s query: %v", q.name, err)
+		}
+	}
+
+	fmt.Println("=============================\n")
+	return nil
+}
+
 func main() {
-	if len(os.Args) != 4 {
-		_, _ = fmt.Fprintf(os.Stderr, "Usage: %s <osd_pod_name> <namespace> <memgraph_container_name>\n", os.Args[0])
+	if len(os.Args) != 3 {
+		_, _ = fmt.Fprintf(os.Stderr, "Usage: %s <osd_pod_name> <namespace> <memgraph_host:port> <memgraph_user>\n", os.Args[0])
+		_, _ = fmt.Fprintf(os.Stderr, "Example: %s rook-ceph-osd-0 rook-ceph localhost:7687 \"\"\n", os.Args[0])
 		os.Exit(1)
 	}
 
 	osdPod := os.Args[1]
 	namespace := os.Args[2]
-	memgraphContainer := os.Args[3]
+	memgraphAddress := "localhost:7687"
+	memgraphUser := ""
 
 	// Check for required commands
-	requiredCmds := []string{"kubectl", "docker"}
+	requiredCmds := []string{"kubectl"}
 	for _, cmd := range requiredCmds {
 		if !commandExists(cmd) {
 			log.Fatalf("Error: %s is required but not installed", cmd)
@@ -76,18 +375,21 @@ func main() {
 		log.Fatalf("Error: %v", err)
 	}
 
-	// Validate Memgraph container is running
-	if err := validateMemgraphContainer(memgraphContainer); err != nil {
-		log.Fatalf("Error: %v", err)
+	// Create Memgraph client with long-lived session
+	ctx := context.Background()
+	client, err := NewMemgraphClient(memgraphAddress, memgraphUser, "", logger)
+	if err != nil {
+		log.Fatalf("Error creating Memgraph client: %v", err)
 	}
+	defer client.Close(ctx)
 
-	// Check Memgraph storage and connectivity
-	if err := checkMemgraphSetup(memgraphContainer, logger); err != nil {
-		log.Fatalf("Error: %v", err)
+	// Test connection
+	if err := client.TestConnection(ctx); err != nil {
+		log.Fatalf("Error testing Memgraph connection: %v", err)
 	}
 
 	// Create OSD node in Memgraph
-	if err := createOSDNode(memgraphContainer, osdID, logger); err != nil {
+	if err := client.CreateOSDNode(ctx, osdID); err != nil {
 		log.Fatalf("Error creating OSD node: %v", err)
 	}
 
@@ -105,19 +407,25 @@ func main() {
 	}
 
 	// Process PG objects
-	if err := processPGObjects(pgObjectPairs, memgraphContainer, osdID, tempCypherDir, logger); err != nil {
+	if err := client.ProcessPGObjects(ctx, pgObjectPairs, osdID); err != nil {
 		log.Fatalf("Error processing PG objects: %v", err)
 	}
 
-	// Force snapshot
-	if err := forceSnapshot(memgraphContainer, tempCypherDir, logger); err != nil {
-		log.Fatalf("Error forcing snapshot: %v", err)
+	// Get final statistics
+	if err := client.GetStats(ctx); err != nil {
+		log.Fatalf("Error getting final stats: %v", err)
+	}
+
+	// Create snapshot
+	if err := client.CreateSnapshot(ctx); err != nil {
+		log.Fatalf("Error creating snapshot: %v", err)
 	}
 
 	fmt.Printf("Processing complete for OSD pod %s. Logs in %s\n", osdPod, logFile)
 	fmt.Printf("PGs recorded locally: %s\n", pgsFilepath)
 }
 
+// Utility functions (unchanged from original)
 func commandExists(cmd string) bool {
 	_, err := exec.LookPath(cmd)
 	return err == nil
@@ -155,83 +463,6 @@ func validateOSDPod(osdPod, namespace string) error {
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("OSD pod %s not found in namespace %s", osdPod, namespace)
 	}
-	return nil
-}
-
-func validateMemgraphContainer(container string) error {
-	cmd := exec.Command("docker", "ps")
-	output, err := cmd.Output()
-	if err != nil {
-		return fmt.Errorf("failed to check docker containers: %v", err)
-	}
-	if !strings.Contains(string(output), container) {
-		return fmt.Errorf("Memgraph container %s not running", container)
-	}
-	return nil
-}
-
-func checkMemgraphSetup(container string, logger *log.Logger) error {
-	logger.Println("Checking Memgraph storage directory...")
-	fmt.Println("Checking Memgraph storage directory...")
-
-	// Check storage directory
-	cmd := exec.Command("docker", "exec", container, "ls", "-ld", "/var/lib/memgraph")
-	output, err := cmd.CombinedOutput()
-	logger.Printf("Storage check output: %s", string(output))
-	if err != nil {
-		logger.Printf("Error checking storage: %v", err)
-		return fmt.Errorf("cannot access /var/lib/memgraph in container. Check logs")
-	}
-
-	// Check for WAL and snapshot files
-	logger.Println("Checking for WAL and snapshot files...")
-	cmd = exec.Command("docker", "exec", container, "ls", "-l", "/var/lib/memgraph/*.wal", "/var/lib/memgraph/*.snapshot")
-	output, err = cmd.CombinedOutput()
-	logger.Printf("WAL/snapshot check output: %s", string(output))
-
-	// Test connectivity
-	logger.Println("Testing Memgraph connectivity...")
-	fmt.Println("Testing Memgraph connectivity...")
-	cmd = exec.Command("docker", "exec", "-i", container, "mgconsole")
-	cmd.Stdin = strings.NewReader("SHOW CONFIG;\n")
-	output, err = cmd.CombinedOutput()
-	logger.Printf("Connectivity test output: %s", string(output))
-	if err != nil {
-		logger.Printf("Error testing connectivity: %v", err)
-		return fmt.Errorf("failed to connect to Memgraph. Check logs")
-	}
-
-	logger.Println("Memgraph connectivity OK")
-	fmt.Println("Memgraph connectivity OK")
-	return nil
-}
-
-func createOSDNode(container, osdID string, logger *log.Logger) error {
-	logger.Printf("Creating OSD node for ID %s", osdID)
-	fmt.Printf("Creating OSD node for ID %s\n", osdID)
-
-	query := fmt.Sprintf(`
-		BEGIN;
-			MERGE (o:OSD {id: '%s'}) ON CREATE SET o.created_at = timestamp(), o.name = 'osd-%s';
-		COMMIT;`,
-		osdID, osdID,
-	)
-
-	cleanQuery := strings.ReplaceAll(query, "\n", " ")
-	cleanQuery = strings.ReplaceAll(cleanQuery, "\t", " ")
-
-	cmd := exec.Command("docker", "exec", "-i", container, "mgconsole")
-	cmd.Stdin = strings.NewReader(cleanQuery)
-	output, err := cmd.CombinedOutput()
-	logger.Printf("OSD node creation output: %s", string(output))
-	fmt.Printf("OSD node creation output: %s\n", string(output))
-
-	if err != nil {
-		logger.Printf("Error creating OSD node: %v", err)
-		return fmt.Errorf("failed to execute OSD node creation query")
-	}
-
-	fmt.Println("OSD node created")
 	return nil
 }
 
@@ -301,7 +532,6 @@ func parseObjectList(objectList string, logger *log.Logger) ([]PGObjectPair, err
 		}
 
 		pgMap[pgID] = append(pgMap[pgID], oid)
-
 		fmt.Printf("Found object: %s in PG: %s\n", oid, pgID)
 	}
 
@@ -314,145 +544,8 @@ func parseObjectList(objectList string, logger *log.Logger) ([]PGObjectPair, err
 		})
 	}
 
-	logger.Println("Processing PG objects...")
-	fmt.Println("Processing PG objects...")
+	logger.Printf("Parsed %d PGs with objects", len(pairs))
+	fmt.Printf("Parsed %d PGs with objects\n", len(pairs))
 
 	return pairs, nil
-}
-
-func processPGObjects(pairs []PGObjectPair, container, osdID, tempDir string, logger *log.Logger) error {
-	for _, pair := range pairs {
-		if err := processSinglePG(pair, container, osdID, tempDir, logger); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func processSinglePG(pair PGObjectPair, container, osdID, tempDir string, logger *log.Logger) error {
-	objectCount := len(pair.Objects)
-	logger.Printf("Generating query for PG %s", pair.PGID)
-
-	// Create PG node and relationship
-	pgQuery := fmt.Sprintf(
-		`BEGIN;
-		MATCH (o:OSD {id: '%s'})
-		MERGE (p:PG {id: '%s'}) ON CREATE SET p.created_at = timestamp(), p.name = 'PG %s'
-		MERGE (o)-[:CONTAINS]->(p);
-		COMMIT;`,
-		osdID, pair.PGID, pair.PGID,
-	)
-
-	fmt.Printf("Creating PG %s with %d objects\n", pair.PGID, objectCount)
-
-	cleanQuery := strings.ReplaceAll(pgQuery, "\n", " ")
-	cleanQuery = strings.ReplaceAll(cleanQuery, "\t", " ")
-
-	cmd := exec.Command("docker", "exec", "-i", container, "mgconsole")
-	cmd.Stdin = strings.NewReader(cleanQuery)
-	output, err := cmd.CombinedOutput()
-	logger.Printf("PG creation output: %s", string(output))
-	if err != nil {
-		logger.Printf("Error creating PG: %v", err)
-		return fmt.Errorf("failed to create PG %s", pair.PGID)
-	}
-
-	// Process objects in batches to avoid memory issues
-	const batchSize = 100
-	for i := 0; i < len(pair.Objects); i += batchSize {
-		end := i + batchSize
-		if end > len(pair.Objects) {
-			end = len(pair.Objects)
-		}
-
-		batch := pair.Objects[i:end]
-		if err := processBatchObjects(batch, pair.PGID, container, osdID, logger); err != nil {
-			return err
-		}
-
-		fmt.Printf("Added %d objects to PG %s\n", len(batch), pair.PGID)
-	}
-
-	logger.Printf("Inserted %d objects for PG %s", objectCount, pair.PGID)
-	return nil
-}
-
-func processBatchObjects(objects []string, pgID, container, osdID string, logger *log.Logger) error {
-	var queryBuilder strings.Builder
-	queryBuilder.WriteString("BEGIN; ")
-
-	for _, objectName := range objects {
-		if objectName == "" {
-			continue
-		}
-
-		logger.Printf("Inserting into PG %s -> Object %s", pgID, objectName)
-
-		queryBuilder.WriteString(fmt.Sprintf(`
-			MATCH (o:OSD {id: '%s'}) MATCH (p:PG {id: '%s'})
-			MERGE (b:Object {id: '%s'})-[:IS]->(ub:UniqueObject {id: '%s-%s'})
-			ON CREATE SET
-				b.created_at = timestamp(), b.name = 'Obj %s',
-				ub.created_at = timestamp(), ub.name = '[%s] Obj %s'
-			MERGE (o)-[:CONTAINS]->(ub)
-			MERGE (p)-[:CONTAINS]->(ub)
-			MERGE (p)-[:CONTAINS]->(b);`,
-			osdID, pgID,
-			objectName, osdID, objectName,
-			objectName,
-			osdID, objectName,
-		))
-
-		fmt.Printf("Added object %s to PG %s\n", objectName, pgID)
-	}
-
-	queryBuilder.WriteString(" COMMIT;")
-
-	cleanQuery := strings.ReplaceAll(queryBuilder.String(), "\n", " ")
-	cleanQuery = strings.ReplaceAll(cleanQuery, "\t", " ")
-
-	logger.Printf("Executing query: %s", cleanQuery)
-
-	cmd := exec.Command("docker", "exec", "-i", container, "mgconsole")
-	cmd.Stdin = strings.NewReader(cleanQuery)
-	output, err := cmd.CombinedOutput()
-
-	logger.Printf("Batch insert output: %s", output)
-	fmt.Printf("Batch insert output: %s\n", output)
-
-	if err != nil {
-		logger.Printf("Error inserting batch for PG %s: %v", pgID, err)
-		return fmt.Errorf("failed to insert objects for PG %s", pgID)
-	}
-
-	return nil
-}
-
-func forceSnapshot(container, tempDir string, logger *log.Logger) error {
-	logger.Println("Forcing snapshot...")
-	fmt.Println("Forcing snapshot...")
-
-	snapshotFile := filepath.Join(tempDir, "snapshot.cypher")
-	if err := os.WriteFile(snapshotFile, []byte("CALL mg.create_snapshot();"), 0644); err != nil {
-		return fmt.Errorf("failed to create snapshot file: %v", err)
-	}
-
-	cmd := exec.Command("docker", "exec", "-i", container, "mgconsole")
-
-	file, err := os.Open(snapshotFile)
-	if err != nil {
-		return fmt.Errorf("failed to open snapshot file: %v", err)
-	}
-	defer file.Close()
-
-	cmd.Stdin = file
-	output, err := cmd.CombinedOutput()
-	logger.Printf("Snapshot output: %s", string(output))
-
-	if err != nil {
-		logger.Printf("Error creating snapshot: %v", err)
-		return fmt.Errorf("failed to create snapshot")
-	}
-
-	return nil
 }
