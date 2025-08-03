@@ -148,10 +148,6 @@ func createLogFile(logFile string) error {
 	return f.Close()
 }
 
-func cleanup(tempDir string) {
-	os.RemoveAll(tempDir)
-}
-
 func validateOSDPod(osdPod, namespace string) error {
 	cmd := exec.Command("kubectl", "-n", namespace, "get", "pod", osdPod)
 	cmd.Stdout = nil
@@ -221,10 +217,14 @@ func createOSDNode(container, osdID string, logger *log.Logger) error {
 		osdID, osdID,
 	)
 
-	cmd := exec.Command("docker", "exec", "-i", container, "mgconsole", "--host", "localhost", "--port", "7687")
-	cmd.Stdin = strings.NewReader(query)
+	cleanQuery := strings.ReplaceAll(query, "\n", " ")
+	cleanQuery = strings.ReplaceAll(cleanQuery, "\t", " ")
+
+	cmd := exec.Command("docker", "exec", "-i", container, "mgconsole")
+	cmd.Stdin = strings.NewReader(cleanQuery)
 	output, err := cmd.CombinedOutput()
 	logger.Printf("OSD node creation output: %s", string(output))
+	fmt.Printf("OSD node creation output: %s\n", string(output))
 
 	if err != nil {
 		logger.Printf("Error creating OSD node: %v", err)
@@ -260,10 +260,22 @@ func parseObjectList(objectList string, logger *log.Logger) ([]PGObjectPair, err
 	logger.Println("Splitting object list into PGs...")
 	fmt.Println("Splitting object list into PGs...")
 
-	// Parse JSON array
+	// Parse each line as a separate JSON array
+	lines := strings.Split(strings.TrimSpace(objectList), "\n")
 	var objects []ObjectData
-	if err := json.Unmarshal([]byte(objectList), &objects); err != nil {
-		return nil, fmt.Errorf("failed to parse object list JSON: %v", err)
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		var obj ObjectData
+		if err := json.Unmarshal([]byte(line), &obj); err != nil {
+			logger.Printf("Warning: failed to parse line: %s, error: %v", line, err)
+			continue
+		}
+		objects = append(objects, obj)
 	}
 
 	// Group by PG ID
@@ -284,11 +296,13 @@ func parseObjectList(objectList string, logger *log.Logger) ([]PGObjectPair, err
 		}
 
 		oid, ok := objInfo["oid"].(string)
-		if !ok {
-			continue
+		if !ok || oid == "" {
+			continue // Skip empty OIDs
 		}
 
 		pgMap[pgID] = append(pgMap[pgID], oid)
+
+		fmt.Printf("Found object: %s in PG: %s\n", oid, pgID)
 	}
 
 	// Convert to slice
@@ -320,17 +334,22 @@ func processSinglePG(pair PGObjectPair, container, osdID, tempDir string, logger
 	logger.Printf("Generating query for PG %s", pair.PGID)
 
 	// Create PG node and relationship
-	pgQuery := fmt.Sprintf(`
-		BEGIN;
+	pgQuery := fmt.Sprintf(
+		`BEGIN;
 		MATCH (o:OSD {id: '%s'})
-			MERGE (p:PG {id: '%s'}) ON CREATE SET p.created_at = timestamp(), p.name = 'PG %s'
-			MERGE (o)-[:CONTAINS]->(p);
+		MERGE (p:PG {id: '%s'}) ON CREATE SET p.created_at = timestamp(), p.name = 'PG %s'
+		MERGE (o)-[:CONTAINS]->(p);
 		COMMIT;`,
 		osdID, pair.PGID, pair.PGID,
 	)
 
-	cmd := exec.Command("docker", "exec", "-i", container, "mgconsole", "--host", "localhost", "--port", "7687")
-	cmd.Stdin = strings.NewReader(pgQuery)
+	fmt.Printf("Creating PG %s with %d objects\n", pair.PGID, objectCount)
+
+	cleanQuery := strings.ReplaceAll(pgQuery, "\n", " ")
+	cleanQuery = strings.ReplaceAll(cleanQuery, "\t", " ")
+
+	cmd := exec.Command("docker", "exec", "-i", container, "mgconsole")
+	cmd.Stdin = strings.NewReader(cleanQuery)
 	output, err := cmd.CombinedOutput()
 	logger.Printf("PG creation output: %s", string(output))
 	if err != nil {
@@ -350,6 +369,8 @@ func processSinglePG(pair PGObjectPair, container, osdID, tempDir string, logger
 		if err := processBatchObjects(batch, pair.PGID, container, osdID, logger); err != nil {
 			return err
 		}
+
+		fmt.Printf("Added %d objects to PG %s\n", len(batch), pair.PGID)
 	}
 
 	logger.Printf("Inserted %d objects for PG %s", objectCount, pair.PGID)
@@ -358,7 +379,7 @@ func processSinglePG(pair PGObjectPair, container, osdID, tempDir string, logger
 
 func processBatchObjects(objects []string, pgID, container, osdID string, logger *log.Logger) error {
 	var queryBuilder strings.Builder
-	queryBuilder.WriteString("BEGIN;")
+	queryBuilder.WriteString("BEGIN; ")
 
 	for _, objectName := range objects {
 		if objectName == "" {
@@ -369,26 +390,35 @@ func processBatchObjects(objects []string, pgID, container, osdID string, logger
 
 		queryBuilder.WriteString(fmt.Sprintf(`
 			MATCH (o:OSD {id: '%s'}) MATCH (p:PG {id: '%s'})
-				MERGE (b:Object {id: '%s'})-[:IS]->(ub:UniqueObject {id: '%s-%s'})
-				ON CREATE SET
-					b.created_at = timestamp(),
-					b.name = 'Obj %s',
-					ub.created_at = timestamp(),
-					ub.name = '[%s] Obj %s'
-				MERGE (o)-[:CONTAINS]->(ub)
-				MERGE (p)-[:CONTAINS]->(ub)
-				MERGE (p)-[:CONTAINS]->(b);
-			`,
-			osdID, pgID, objectName, osdID, objectName, objectName, osdID, objectName,
+			MERGE (b:Object {id: '%s'})-[:IS]->(ub:UniqueObject {id: '%s-%s'})
+			ON CREATE SET
+				b.created_at = timestamp(), b.name = 'Obj %s',
+				ub.created_at = timestamp(), ub.name = '[%s] Obj %s'
+			MERGE (o)-[:CONTAINS]->(ub)
+			MERGE (p)-[:CONTAINS]->(ub)
+			MERGE (p)-[:CONTAINS]->(b);`,
+			osdID, pgID,
+			objectName, osdID, objectName,
+			objectName,
+			osdID, objectName,
 		))
+
+		fmt.Printf("Added object %s to PG %s\n", objectName, pgID)
 	}
 
-	queryBuilder.WriteString("COMMIT;")
+	queryBuilder.WriteString(" COMMIT;")
 
-	cmd := exec.Command("docker", "exec", "-i", container, "mgconsole", "--host", "localhost", "--port", "7687")
-	cmd.Stdin = strings.NewReader(queryBuilder.String())
+	cleanQuery := strings.ReplaceAll(queryBuilder.String(), "\n", " ")
+	cleanQuery = strings.ReplaceAll(cleanQuery, "\t", " ")
+
+	logger.Printf("Executing query: %s", cleanQuery)
+
+	cmd := exec.Command("docker", "exec", "-i", container, "mgconsole")
+	cmd.Stdin = strings.NewReader(cleanQuery)
 	output, err := cmd.CombinedOutput()
-	logger.Printf("Batch insert output: %s", string(output))
+
+	logger.Printf("Batch insert output: %s", output)
+	fmt.Printf("Batch insert output: %s\n", output)
 
 	if err != nil {
 		logger.Printf("Error inserting batch for PG %s: %v", pgID, err)
@@ -407,7 +437,7 @@ func forceSnapshot(container, tempDir string, logger *log.Logger) error {
 		return fmt.Errorf("failed to create snapshot file: %v", err)
 	}
 
-	cmd := exec.Command("docker", "exec", "-i", container, "mgconsole", "--host", "localhost", "--port", "7687")
+	cmd := exec.Command("docker", "exec", "-i", container, "mgconsole")
 
 	file, err := os.Open(snapshotFile)
 	if err != nil {
