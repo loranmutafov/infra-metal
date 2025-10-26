@@ -72,7 +72,9 @@ if [ $? -ne 0 ]; then
 fi
 echo "OSD node created"
 
-op_list=$(kubectl -n "$NAMESPACE" exec "$OSD_POD" -- ceph-objectstore-tool --data-path "$DATA_PATH" --op list)
+pgs_filepath="$TEMP_CYPHER_DIR/osd-$OSD_ID-pgs.json"
+kubectl -n "$NAMESPACE" exec "$OSD_POD" -- ceph-objectstore-tool --data-path "$DATA_PATH" --op list > "$pgs_filepath" 2>>"$LOG_FILE"
+op_list=$(cat $pgs_filepath)
 if [ $? -ne 0 ]; then
     echo "Error: Failed to list objects for PG $PG_ID. Check $LOG_FILE" | tee -a "$LOG_FILE"
     exit 1
@@ -152,3 +154,4 @@ docker exec -i "$MEMGRAPH_CONTAINER" mgconsole --host localhost --port 7687 < "$
 rm -rf "$TEMP_CYPHER_DIR"
 
 echo "Processing complete for OSD pod $OSD_POD. Logs in $LOG_FILE" | tee -a "$LOG_FILE"
+echo "PGs recorded locally: $pgs_filepath"

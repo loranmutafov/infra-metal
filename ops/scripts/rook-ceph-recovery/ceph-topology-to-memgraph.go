@@ -189,7 +189,7 @@ func (mc *MemgraphClient) processSinglePG(ctx context.Context, pair PGObjectPair
 	}
 
 	// Process objects in batches
-	const batchSize = 100
+	const batchSize = 200
 	for i := 0; i < len(pair.Objects); i += batchSize {
 		end := i + batchSize
 		if end > len(pair.Objects) {
@@ -209,50 +209,78 @@ func (mc *MemgraphClient) processSinglePG(ctx context.Context, pair PGObjectPair
 }
 
 func (mc *MemgraphClient) processBatchObjects(ctx context.Context, objects []string, pgID, osdID string) error {
-	// Use a write transaction for the entire batch
+	// Filter out empty objects first
+	var validObjects []string
+	for _, obj := range objects {
+		if obj != "" {
+			validObjects = append(validObjects, obj)
+		}
+	}
+
+	if len(validObjects) == 0 {
+		return nil
+	}
+
+	// Use a single write transaction with UNWIND for batch processing
 	_, err := mc.session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (interface{}, error) {
-		for _, objectName := range objects {
-			if objectName == "" {
-				continue
-			}
-
-			query := `
-				MATCH (o:OSD {id: $osd_id}) 
-				MATCH (p:PG {id: $pg_id})
-				MERGE (b:Object {id: $object_id})-[:IS]->(ub:UniqueObject {id: $unique_object_id})
-				ON CREATE SET 
-					b.created_at = timestamp(), 
-					b.name = $object_name,
-					ub.created_at = timestamp(), 
-					ub.name = $unique_object_name
-				MERGE (o)-[:CONTAINS]->(ub)
-				MERGE (p)-[:CONTAINS]->(ub)
-				MERGE (p)-[:CONTAINS]->(b)
-			`
-
-			params := map[string]interface{}{
-				"osd_id":             osdID,
-				"pg_id":              pgID,
+		// Prepare batch data
+		var batchData []map[string]interface{}
+		for _, objectName := range validObjects {
+			batchData = append(batchData, map[string]interface{}{
 				"object_id":          objectName,
 				"unique_object_id":   fmt.Sprintf("%s-%s", osdID, objectName),
 				"object_name":        fmt.Sprintf("Obj %s", objectName),
 				"unique_object_name": fmt.Sprintf("[%s] Obj %s", osdID, objectName),
-			}
-
-			_, err := tx.Run(ctx, query, params)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create object %s: %v", objectName, err)
-			}
-
-			fmt.Printf("Created object: %s in PG: %s\n", objectName, pgID)
+			})
 		}
+
+		// Single batch query using UNWIND
+		query := `
+			MATCH (o:OSD {id: $osd_id}) 
+			MATCH (p:PG {id: $pg_id})
+			UNWIND $batch_data AS item
+			MERGE (b:Object {id: item.object_id})-[:IS]->(ub:UniqueObject {id: item.unique_object_id})
+			ON CREATE SET 
+				b.created_at = timestamp(), 
+				b.name = item.object_name,
+				ub.created_at = timestamp(), 
+				ub.name = item.unique_object_name
+			MERGE (o)-[:CONTAINS]->(ub)
+			MERGE (p)-[:CONTAINS]->(ub)
+			MERGE (p)-[:CONTAINS]->(b)
+		`
+
+		params := map[string]interface{}{
+			"osd_id":     osdID,
+			"pg_id":      pgID,
+			"batch_data": batchData,
+		}
+
+		result, err := tx.Run(ctx, query, params)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create batch objects: %v", err)
+		}
+
+		// Consume the result
+		summary, err := result.Consume(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to consume batch result: %v", err)
+		}
+
+		mc.logger.Printf("Batch processed: %d objects, nodes created: %d, relationships created: %d",
+			len(validObjects), summary.Counters().NodesCreated(), summary.Counters().RelationshipsCreated())
 
 		return nil, nil
 	})
 
-	mc.logger.Printf("Created %d objects in PG %s", len(objects), pgID)
+	if err != nil {
+		return err
+	}
 
-	return err
+	fmt.Printf("Created %d objects in PG %s\n", len(validObjects), pgID)
+	mc.logger.Printf("Created %d objects in PG %s", len(validObjects), pgID)
+
+	return nil
 }
 
 func (mc *MemgraphClient) CreateSnapshot(ctx context.Context) error {
