@@ -24,7 +24,7 @@ in
   environment.systemPackages = with pkgs; [
     # kompose
     # kubectl
-    flakeInputs.self.packages.kubernetes_1_26
+    flakeInputs.self.packages.kubernetes_1_32
     cri-tools
     ethtool
     socat
