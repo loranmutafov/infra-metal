@@ -14,3 +14,6 @@ deploy-eli:
 
 deploy-100yan:
 	./ops/scripts/deploy.sh "--on metal-100yan $(filter-out $@,$(MAKECMDGOALS))"
+
+update:
+	./ops/scripts/nixcmd.sh nix flake update
