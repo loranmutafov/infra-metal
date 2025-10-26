@@ -1,11 +1,19 @@
 { config, lib, pkgs, flakeInputs, ... }:
 let
   kubeletNodeIP = null;
-  kubeMasterIP = "95.111.244.161";
-  kubeMasterHostname = "kubernetes.default";
+  kubeMasterIP = "100.123.46.40";
+  kubeMasterHostname = "vmi389591.contaboserver.net";
   kubeMasterAPIServerPort = 6443;
 in
 {
+    networking.extraHosts = ''
+        100.111.220.64  vmi384815.contaboserver.net vmi384815
+        100.123.46.40   vmi389591.contaboserver.net vmi389591
+        100.93.103.69   vmi428314.contaboserver.net vmi428314
+        100.87.42.69    vmi430563.contaboserver.net vmi430563
+        100.65.102.102  vmi431810.contaboserver.net vmi431810
+      '';
+
   # disable swap
   swapDevices = lib.mkForce [ ];
 
@@ -47,7 +55,7 @@ in
     # };
 
     caFile = ../certs/kubernetes-ca.pem;
-    # kubelet.hostname = "metal-1.loran.dev";
+
     # certFile = ../certs/kubernetes-node-cert.pem;
     # keyFile = ../certs/kubernetes-node-key.pem;
 
