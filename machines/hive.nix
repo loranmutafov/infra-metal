@@ -33,6 +33,12 @@ inputs@{ nixpkgs, utils, ... }: {
       ./_common
     ];
 
+    users.users.cloudflared = {
+      group = "cloudflared";
+      isSystemUser = true;
+    };
+    users.groups.cloudflared = { };
+
     nixpkgs = {
       system = lib.mkDefault "x86_64-linux";
       config.allowUnfree = true;

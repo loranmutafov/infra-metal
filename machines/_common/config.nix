@@ -3,7 +3,7 @@
     settings.experimental-features = [ "nix-command" "flakes" ];
     
     gc.automatic = true;
-    gc.options = "--delete-older-than 15d";
+    gc.options = "--delete-older-than 60d";
     gc.dates = "daily";
     optimise.automatic = true;
   };
