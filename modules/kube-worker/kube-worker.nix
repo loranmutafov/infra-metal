@@ -1,5 +1,6 @@
-{ config, lib, pkgs, flakeInputs, ... }:
+{ config, lib, pkgs, name, flakeInputs, ... }:
 let
+  kubeletHostname = name;
   kubeletNodeIP = null;
   kubeMasterIP = "100.123.46.40";
   kubeMasterHostname = "vmi389591.contaboserver.net";
@@ -38,7 +39,6 @@ in
     masterAddress = kubeMasterHostname;
 
     # point kubelet and other services to kube-apiserver
-    kubelet.kubeconfig.server = api;
     apiserverAddress = api;
 
     # use coredns
@@ -51,12 +51,38 @@ in
     #   verbosity = 3;
     # };
 
-    caFile = ../certs/kubernetes-ca.pem;
-
-    # certFile = ../certs/kubernetes-node-cert.pem;
-    # keyFile = ../certs/kubernetes-node-key.pem;
+    # PKI config for kubelet
+    kubelet.kubeconfig = {
+      server = api;
+      caFile = ../../certs/kubernetes-ca.pem;
+      certFile = "/secrets/kube-worker/kubelet-${kubeletHostname}.cert";
+      keyFile = "/secrets/kube-worker/kubelet-${kubeletHostname}.key";
+    };
+    kubelet.extraOpts = "--root-dir=/var/lib/kubelet";
 
     # needed if you use swap
     # kubelet.extraOpts = "--fail-swap-on=false";
+  };
+
+  # Kubelet client certs
+  deployment.keys."kubelet-${kubeletHostname}.cert" = {
+    keyCommand = [ "op" "inject" "-i" "../modules/kube-worker/certs/${kubeletHostname}.cert" ];
+
+    destDir = "/secrets/kube-worker/";
+    user = "kubernetes";
+    group = "kubernetes";
+    permissions = "0600";
+
+    uploadAt = "pre-activation";
+  };
+  deployment.keys."kubelet-${kubeletHostname}.key" = {
+    keyCommand = [ "op" "inject" "-i" "../modules/kube-worker/certs/${kubeletHostname}.key" ];
+
+    destDir = "/secrets/kube-worker/";
+    user = "kubernetes";
+    group = "kubernetes";
+    permissions = "0600";
+
+    uploadAt = "pre-activation";
   };
 }
