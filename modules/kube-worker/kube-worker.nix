@@ -27,13 +27,18 @@ in
       100.65.102.102  vmi431810.contaboserver.net vmi431810
     '';
 
+    # Allow Cilium Wireguard UDP port
+    # https://docs.cilium.io/en/stable/operations/system_requirements/
+    networking.firewall.allowedUDPPorts = [ 51871 ];
+
+    # https://nixos.wiki/wiki/Kubernetes
+    boot.kernelModules = [ "ceph" ];
+
     # disable swap
     swapDevices = lib.mkForce [ ];
 
     # packages for administration tasks
     environment.systemPackages = with pkgs; [
-      # kompose
-      # kubectl
       flakeInputs.self.packages.kubernetes_1_32
       cri-tools
       ethtool
@@ -65,6 +70,7 @@ in
       # };
 
       # PKI config for kubelet
+      # https://github.com/NixOS/nixpkgs/blob/master/nixos/modules/services/cluster/kubernetes/kubelet.nix
       kubelet = {
         nodeIp = cfg.kubeletNodeIP;
 
