@@ -80,7 +80,7 @@ in
           certFile = "/secrets/kube-worker/kubelet-${kubeletHostname}.cert";
           keyFile = "/secrets/kube-worker/kubelet-${kubeletHostname}.key";
         };
-        extraOpts = "--root-dir=/var/lib/kubelet --rotate-server-certificates=true";
+        extraOpts = "--root-dir=/var/lib/kubelet --rotate-server-certificates=true --client-ca-file=${../../certs/kubernetes-ca.pem}";
       };
 
       # needed if you use swap
