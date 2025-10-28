@@ -32,7 +32,7 @@ in
     networking.firewall.allowedUDPPorts = [ 51871 ];
 
     # https://nixos.wiki/wiki/Kubernetes
-    boot.kernelModules = [ "ceph" ];
+    boot.kernelModules = [ "ceph" "rbd" "nbd" ];
 
     # disable swap
     swapDevices = lib.mkForce [ ];
