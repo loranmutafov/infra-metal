@@ -47,6 +47,7 @@ in
       api = "https://${kubeMasterHostname}:${toString kubeMasterAPIServerPort}";
     in
     {
+      package = flakeInputs.self.packages.kubernetes_1_32;
       roles = ["node"];
       masterAddress = kubeMasterHostname;
 
