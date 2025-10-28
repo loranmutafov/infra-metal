@@ -7,6 +7,11 @@
   time.timeZone = "Europe/Sofia";
 
   reaVaultNode = {
-    enable = true;
+    enabled = true;
+  };
+
+  kubeWorkerNode = {
+    enabled = true;
+    kubeletNodeIP = "100.91.190.115";
   };
 }

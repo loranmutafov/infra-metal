@@ -5,13 +5,13 @@ with lib; let
 in
 {
   options.reaVaultNode = {
-    enable = mkOption {
+    enabled = mkOption {
       type = types.bool;
       default = false;
     };
   };
 
-  config = mkIf cfg.enable {
+  config = mkIf cfg.enabled {
     deployment.tags = [ "vault" ];
     systemd.tmpfiles.rules = [ "d /vault/data 1777 root root -" ];
 
