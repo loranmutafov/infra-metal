@@ -13,7 +13,7 @@ in
       default = false;
     };
     kubeletNodeIP = mkOption {
-      type = types.string;
+      type = types.str;
       default = null;
     };
   };
@@ -73,6 +73,9 @@ in
       # https://github.com/NixOS/nixpkgs/blob/master/nixos/modules/services/cluster/kubernetes/kubelet.nix
       kubelet = {
         nodeIp = cfg.kubeletNodeIP;
+
+        # Don't manage CNI plugins via Nix - let Cilium install them
+        cni.packages = lib.mkForce [];
 
         kubeconfig = {
           server = api;
