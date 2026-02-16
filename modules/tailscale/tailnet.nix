@@ -17,5 +17,11 @@
     uploadAt = "pre-activation";
   };
 
+  # Tell the Kernel about Tailscale IP ranges to simplify everything
+  networking.interfaces.tailscale0.ipv4.routes = [{
+    address = "100.64.0.0";
+    prefixLength = 10;
+  }];
+
   systemd.services.tailscaled.after = ["NetworkManager-wait-online.service"];
 }

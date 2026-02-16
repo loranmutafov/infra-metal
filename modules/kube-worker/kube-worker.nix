@@ -90,6 +90,14 @@ in
       # kubelet.extraOpts = "--fail-swap-on=false";
     };
 
+    # Cilium doesn't usually set the Services CIDR for some reason
+    # We set it, because we won't be able to find it otherwise with our
+    # Tailscale setup.
+    networking.interfaces.cilium_host.ipv4.routes = [{
+      address = "10.96.0.0";
+      prefixLength = 12;
+    }];
+
     # Kubelet client certs
     deployment.keys."kubelet-${kubeletHostname}.cert" = {
       keyCommand = [ "op" "inject" "-i" "../modules/kube-worker/certs/${kubeletHostname}.cert" ];
