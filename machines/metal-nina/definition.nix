@@ -14,4 +14,9 @@
   reaVaultNode = {
     enabled = true;
   };
+
+  kubeWorkerNode = {
+    enabled = false;
+    kubeletNodeIP = "100.88.172.51";
+  };
 }
