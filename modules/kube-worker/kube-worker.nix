@@ -98,6 +98,45 @@ in
       prefixLength = 12;
     }];
 
+    # Enable IP forwarding so Tailscale can route subnet traffic through this node
+    services.tailscale.useRoutingFeatures = "server";
+
+    # Dynamically discover this node's Cilium pod CIDR and advertise it via Tailscale.
+    # Cilium IPAM allocates each node a /24 from the cluster pod CIDR. We read the
+    # cilium_host interface IP to derive it, then tell Tailscale to advertise the route.
+    systemd.services.tailscale-advertise-pod-cidr = {
+      description = "Advertise Cilium pod CIDR via Tailscale";
+      after = [ "tailscaled.service" "kubelet.service" ];
+      wants = [ "tailscaled.service" ];
+      wantedBy = [ "multi-user.target" ];
+
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+      };
+
+      path = with pkgs; [ iproute2 tailscale gawk ];
+
+      script = ''
+        # Wait for cilium_host interface to get an IP from Cilium IPAM
+        echo "Waiting for cilium_host interface to receive an IP..."
+        while true; do
+          CILIUM_IP=$(ip -4 addr show cilium_host 2>/dev/null | awk '/inet / {split($2, a, "/"); print a[1]}')
+          if [ -n "$CILIUM_IP" ]; then
+            break
+          fi
+          sleep 5
+        done
+
+        # Derive the /24 subnet from the allocated IP
+        IFS='.' read -r a b c d <<< "$CILIUM_IP"
+        POD_CIDR="''${a}.''${b}.''${c}.0/24"
+
+        echo "Advertising pod CIDR $POD_CIDR via Tailscale"
+        tailscale set --advertise-routes="$POD_CIDR"
+      '';
+    };
+
     # Kubelet client certs
     deployment.keys."kubelet-${kubeletHostname}.cert" = {
       keyCommand = [ "op" "inject" "-i" "../modules/kube-worker/certs/${kubeletHostname}.cert" ];
