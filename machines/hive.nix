@@ -74,7 +74,7 @@ inputs@{ nixpkgs, utils, ... }: {
       # may be specified.
       # keyFile = ./metal-nina/cloudflared-2023.10.0;
       keyCommand = [
-        "op"
+        "pass-cli"
         "inject"
         "-i"
         "./metal-nina/cloudflared-2023.10.0.tpl"
