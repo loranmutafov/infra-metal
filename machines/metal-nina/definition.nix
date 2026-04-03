@@ -6,7 +6,7 @@
 
   imports = [
     ./hardware-configuration.nix
-    # ../../modules/kube-worker/kube-worker.nix
+    ../../modules/kube-worker/kube-worker.nix
   ];
 
   time.timeZone = "Europe/Sofia";
