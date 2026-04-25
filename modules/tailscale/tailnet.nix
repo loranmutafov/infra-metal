@@ -21,7 +21,7 @@ in
     };
 
     deployment.keys."tailscale.key" = {
-      keyCommand = [ "op" "inject" "-i" "../modules/tailscale/tailscale.key" ];
+      keyCommand = [ "pass-cli" "inject" "-i" "../modules/tailscale/tailscale.key" ];
 
       destDir = "/secrets/tailscale/";
       permissions = "0600";
