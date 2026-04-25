@@ -221,4 +221,20 @@ inputs@{ nixpkgs, utils, ... }: {
     # (e.g. man configuration.nix or on https://nixos.org/nixos/options.html).
     system.stateVersion = "23.11"; # Did you read the comment?
   };
+
+  vps-ionos-ber-1 = { name, nodes, ... }: {
+    time.timeZone = "Europe/Berlin";
+
+    deployment.targetHost = "vps-ionos-ber-1";
+    deployment.targetUser = "loran";
+    deployment.buildOnTarget = true;
+
+    networking.hostName = name;
+
+    imports = [
+      ./vps-ionos-ber-1/definition.nix
+    ];
+
+    system.stateVersion = "25.05";
+  };
 }
