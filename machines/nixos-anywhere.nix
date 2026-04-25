@@ -1,4 +1,4 @@
-inputs@{ nixpkgs, disko, ... }:
+inputs@{ nixpkgs, ... }:
 let
   hive = import ./hive.nix inputs;
 
@@ -28,8 +28,6 @@ let
     specialArgs = { inherit name; nodes = {}; flakeInputs = inputs; };
     modules = [
       colmenaDeploymentStub
-      disko.nixosModules.disko
-      ./${name}/disko.nix
       hive.defaults
       hive.${name}
     ];

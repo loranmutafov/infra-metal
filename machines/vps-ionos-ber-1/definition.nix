@@ -1,5 +1,7 @@
-{ config, lib, pkgs, ... }: {
+{ config, lib, pkgs, flakeInputs, ... }: {
   imports = [
+    flakeInputs.disko.nixosModules.disko
+    ./disko.nix
     ./hardware-configuration.nix
   ];
 
