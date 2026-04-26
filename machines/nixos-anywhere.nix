@@ -9,7 +9,6 @@ let
   # REMOVE A HOST FROM THIS LIST AS SOON AS IT'S INSTALLED AND STABLE.
   # Otherwise a typo against the wrong IP could reformat a live machine.
   installable = [
-    "vps-ionos-ber-1"
   ];
 
   # Stub for Colmena's `deployment` option. `_common/default.nix` uses

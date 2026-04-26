@@ -1,4 +1,4 @@
-.PHONY: deploy deployon deploy-nina deploy-eli deploy-100yan
+.PHONY: deploy deployon deploy-nina deploy-eli deploy-100yan deploy-ionos-ber-1
 
 deploy:
 	./ops/scripts/deploy.sh
@@ -14,6 +14,9 @@ deploy-eli:
 
 deploy-100yan:
 	./ops/scripts/deploy.sh "--on metal-100yan $(filter-out $@,$(MAKECMDGOALS))"
+
+deploy-ionos-ber-1:
+	./ops/scripts/deploy.sh "--on vps-ionos-ber-1 $(filter-out $@,$(MAKECMDGOALS))"
 
 update:
 	./ops/scripts/nixcmd.sh nix flake update

@@ -9,6 +9,11 @@
 
   networking.firewall.enable = false;
 
+  kubeWorkerNode = {
+    enabled = true;
+    kubeletNodeIP = "100.100.251.73";
+  };
+
   # IONOS classic VPS firmware is SeaBIOS (legacy BIOS), not UEFI.
   # Override _common/config.nix's systemd-boot (UEFI-only) with GRUB.
   # Disko auto-registers /dev/vda as the boot device via the EF02 partition,
