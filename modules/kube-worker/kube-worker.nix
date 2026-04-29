@@ -6,34 +6,6 @@ with lib; let
   cfg = config.kubeWorkerNode;
 
   api = "https://${kubeMasterHostname}:${toString kubeMasterAPIServerPort}";
-
-  # Bootstrap kubeconfig template. The CA path is resolved at Nix eval time
-  # (so it lives in /nix/store and is read-only). The bootstrap token slot
-  # is filled by pass-cli at deploy time via Colmena's keyCommand below.
-  #
-  # Used only for first-time TLS bootstrap. After kubelet successfully
-  # bootstraps, it writes a real kubeconfig to /var/lib/kubelet/kubeconfig
-  # using its own auto-generated client cert, and never reads this file again
-  # unless that real kubeconfig is deleted.
-  bootstrapKubeconfigTemplate = pkgs.writeText "bootstrap-kubelet.conf.tpl" ''
-    apiVersion: v1
-    kind: Config
-    clusters:
-    - cluster:
-        certificate-authority: ${../../certs/kubernetes-ca.pem}
-        server: ${api}
-      name: cluster
-    contexts:
-    - context:
-        cluster: cluster
-        user: kubelet-bootstrap
-      name: kubelet-bootstrap
-    current-context: kubelet-bootstrap
-    users:
-    - name: kubelet-bootstrap
-      user:
-        token: {{ pass://Rea Cluster/Kubelet Bootstrap Token/Password }}
-  '';
 in
 {
   options.kubeWorkerNode = {
@@ -174,12 +146,23 @@ in
       '';
     };
 
+    # Cluster CA cert. The bootstrap kubeconfig references it at this path,
+    # so kubelet can verify the API server's identity during bootstrap.
+    deployment.keys."ca.crt" = {
+      keyFile = ../../certs/kubernetes-ca.pem;
+
+      destDir = "/etc/kubernetes/pki/";
+      permissions = "0644";
+
+      uploadAt = "pre-activation";
+    };
+
     # Bootstrap kubeconfig — same shared token across all nodes, fetched from
     # ProtonPass via pass-cli at deploy time. The token authorizes kubelet
     # to submit a CSR; the resulting cert is what actually authenticates
     # this node from then on.
     deployment.keys."bootstrap-kubelet.conf" = {
-      keyCommand = [ "pass-cli" "inject" "-i" "${bootstrapKubeconfigTemplate}" ];
+      keyCommand = [ "pass-cli" "inject" "-i" "../modules/kube-worker/bootstrap-kubelet.conf.tpl" ];
 
       destDir = "/etc/kubernetes/";
       user = "kubernetes";
