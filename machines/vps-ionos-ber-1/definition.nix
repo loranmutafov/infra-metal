@@ -3,6 +3,7 @@
     flakeInputs.disko.nixosModules.disko
     ./disko.nix
     ./hardware-configuration.nix
+    ../../modules/kube-worker/kube-worker.nix
   ];
 
   time.timeZone = "Europe/Berlin";
