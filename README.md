@@ -19,6 +19,22 @@ https://github.com/Cottand/selfhosted
 
 ## Install NixOS
 
+### Via nixos-anywhere, e.g. VPS running Ubuntu
+
+Add the machine under `machines/`, and define its `disko.nix`. See `vps-ionos-ber-1` for an example.
+
+Deploy via `nixos-anywhere`:
+```
+cd machines
+nix run github:nix-community/nixos-anywhere -- \
+  --flake .#vps-ionos-ber-1 \
+  --build-on remote \
+  --generate-hardware-config nixos-generate-config ./vps-ionos-ber-1/hardware-configuration.nix \
+  root@217.154.144.249
+```
+
+### Manually, e.g. bare metal
+
 This first step is always manual, unless you have something like a PiKVM that may be able to automate it. But I don't have one, so I'm not sure how that'd work.
 
 When installing NixOS, I set up a separate partition, as I'm using Ceph as my storage cluster. On a 500GB disk my partitions look something like this:
