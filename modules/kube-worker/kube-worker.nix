@@ -1,10 +1,39 @@
-{ config, lib, pkgs, name, flakeInputs, ... }:
+{ config, lib, pkgs, flakeInputs, ... }:
 with lib; let
-  kubeletHostname = name;
   kubeMasterIP = "100.123.46.40";
   kubeMasterHostname = "vmi389591.contaboserver.net";
   kubeMasterAPIServerPort = 6443;
   cfg = config.kubeWorkerNode;
+
+  api = "https://${kubeMasterHostname}:${toString kubeMasterAPIServerPort}";
+
+  # Bootstrap kubeconfig template. The CA path is resolved at Nix eval time
+  # (so it lives in /nix/store and is read-only). The bootstrap token slot
+  # is filled by pass-cli at deploy time via Colmena's keyCommand below.
+  #
+  # Used only for first-time TLS bootstrap. After kubelet successfully
+  # bootstraps, it writes a real kubeconfig to /var/lib/kubelet/kubeconfig
+  # using its own auto-generated client cert, and never reads this file again
+  # unless that real kubeconfig is deleted.
+  bootstrapKubeconfigTemplate = pkgs.writeText "bootstrap-kubelet.conf.tpl" ''
+    apiVersion: v1
+    kind: Config
+    clusters:
+    - cluster:
+        certificate-authority: ${../../certs/kubernetes-ca.pem}
+        server: ${api}
+      name: cluster
+    contexts:
+    - context:
+        cluster: cluster
+        user: kubelet-bootstrap
+      name: kubelet-bootstrap
+    current-context: kubelet-bootstrap
+    users:
+    - name: kubelet-bootstrap
+      user:
+        token: {{ pass://Rea Cluster/Kubelet Bootstrap Token/Password }}
+  '';
 in
 {
   options.kubeWorkerNode = {
@@ -48,10 +77,7 @@ in
       iptables
     ];
 
-    services.kubernetes = let
-      api = "https://${kubeMasterHostname}:${toString kubeMasterAPIServerPort}";
-    in
-    {
+    services.kubernetes = {
       package = flakeInputs.self.packages.kubernetes_1_32;
       roles = ["node"];
       masterAddress = kubeMasterHostname;
@@ -65,29 +91,40 @@ in
       proxy.enable = false;
       easyCerts = false;
 
-      # kubelet = {
-      #   verbosity = 3;
-      # };
-
-      # PKI config for kubelet
-      # https://github.com/NixOS/nixpkgs/blob/master/nixos/modules/services/cluster/kubernetes/kubelet.nix
+      # PKI config for kubelet — TLS bootstrap mode.
+      # No per-node certs are pre-provisioned. On first start, kubelet:
+      #   1. Sees /var/lib/kubelet/kubeconfig does not exist
+      #   2. Reads the bootstrap kubeconfig (token-authenticated)
+      #   3. Generates its own private key in /var/lib/kubelet/pki/
+      #   4. Submits a CSR to the API server
+      #   5. After approval, writes /var/lib/kubelet/kubeconfig
+      # Subsequent boots use the resolved kubeconfig directly.
       kubelet = {
         nodeIp = cfg.kubeletNodeIP;
 
         # Don't manage CNI plugins via Nix - let Cilium install them
         cni.packages = lib.mkForce [];
 
+        # NixOS's kubelet module insists on a kubeconfig submodule. We give
+        # it the CA + server but no certFile/keyFile — the cert is acquired
+        # at runtime via bootstrap. The --kubeconfig flag in extraOpts below
+        # overrides whatever path NixOS hands kubelet, pointing it at the
+        # location kubelet itself manages post-bootstrap.
         kubeconfig = {
           server = api;
           caFile = ../../certs/kubernetes-ca.pem;
-          certFile = "/secrets/kube-worker/kubelet-${kubeletHostname}.cert";
-          keyFile = "/secrets/kube-worker/kubelet-${kubeletHostname}.key";
         };
-        extraOpts = "--root-dir=/var/lib/kubelet --rotate-server-certificates=true --client-ca-file=${../../certs/kubernetes-ca.pem}";
-      };
 
-      # needed if you use swap
-      # kubelet.extraOpts = "--fail-swap-on=false";
+        extraOpts = concatStringsSep " " [
+          "--root-dir=/var/lib/kubelet"
+          "--rotate-server-certificates=true"
+          "--rotate-certificates=true"
+          "--client-ca-file=${../../certs/kubernetes-ca.pem}"
+          "--bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf"
+          "--kubeconfig=/var/lib/kubelet/kubeconfig"
+          "--cert-dir=/var/lib/kubelet/pki"
+        ];
+      };
     };
 
     # Cilium doesn't usually set the Services CIDR for some reason
@@ -137,21 +174,14 @@ in
       '';
     };
 
-    # Kubelet client certs
-    deployment.keys."kubelet-${kubeletHostname}.cert" = {
-      keyCommand = [ "op" "inject" "-i" "../modules/kube-worker/certs/${kubeletHostname}.cert" ];
+    # Bootstrap kubeconfig — same shared token across all nodes, fetched from
+    # ProtonPass via pass-cli at deploy time. The token authorizes kubelet
+    # to submit a CSR; the resulting cert is what actually authenticates
+    # this node from then on.
+    deployment.keys."bootstrap-kubelet.conf" = {
+      keyCommand = [ "pass-cli" "inject" "-i" "${bootstrapKubeconfigTemplate}" ];
 
-      destDir = "/secrets/kube-worker/";
-      user = "kubernetes";
-      group = "kubernetes";
-      permissions = "0600";
-
-      uploadAt = "pre-activation";
-    };
-    deployment.keys."kubelet-${kubeletHostname}.key" = {
-      keyCommand = [ "op" "inject" "-i" "../modules/kube-worker/certs/${kubeletHostname}.key" ];
-
-      destDir = "/secrets/kube-worker/";
+      destDir = "/etc/kubernetes/";
       user = "kubernetes";
       group = "kubernetes";
       permissions = "0600";
