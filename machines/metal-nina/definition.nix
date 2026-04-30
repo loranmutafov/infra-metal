@@ -9,6 +9,8 @@
     ../../modules/kube-worker/kube-worker.nix
   ];
 
+  networking.firewall.enable = false;
+
   time.timeZone = "Europe/Sofia";
 
   reaVaultNode = {
