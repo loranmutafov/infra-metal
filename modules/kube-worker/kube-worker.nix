@@ -108,7 +108,7 @@ in
     }];
 
     # Enable IP forwarding so Tailscale can route subnet traffic through this node
-    services.tailscale.useRoutingFeatures = "server";
+    services.tailscale.useRoutingFeatures = "both";
 
     # Dynamically discover this node's Cilium pod CIDR and advertise it via Tailscale.
     # Cilium IPAM allocates each node a /24 from the cluster pod CIDR. We read the
