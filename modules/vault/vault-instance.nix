@@ -77,7 +77,7 @@ in
     };
 
     deployment.keys."vault-intermediate.key" = {
-      keyCommand = [ "op" "inject" "-i" "../modules/vault/certs/vault-intermediate.key" ];
+      keyCommand = [ "pass-cli" "inject" "-i" "../modules/vault/certs/vault-intermediate.key" ];
 
       destDir = "/secrets/vault/";
       user = "vault";
@@ -87,7 +87,7 @@ in
       uploadAt = "pre-activation";
     };
     deployment.keys."vault-intermediate.cert" = {
-      keyCommand = [ "op" "inject" "-i" "../modules/vault/certs/vault-intermediate.cert" ];
+      keyCommand = [ "pass-cli" "inject" "-i" "../modules/vault/certs/vault-intermediate.cert" ];
 
       destDir = "/secrets/vault/";
       user = "vault";
@@ -99,7 +99,7 @@ in
 
     # Certs for metal-nina
     deployment.keys."metal-nina.cert" = {
-      keyCommand = [ "op" "inject" "-i" "../modules/vault/certs/metal-nina.cert" ];
+      keyCommand = [ "pass-cli" "inject" "-i" "../modules/vault/certs/metal-nina.cert" ];
 
       destDir = "/secrets/vault/";
       user = "vault";
@@ -109,7 +109,7 @@ in
       uploadAt = "pre-activation";
     };
     deployment.keys."metal-nina.key" = {
-      keyCommand = [ "op" "inject" "-i" "../modules/vault/certs/metal-nina.key" ];
+      keyCommand = [ "pass-cli" "inject" "-i" "../modules/vault/certs/metal-nina.key" ];
 
       destDir = "/secrets/vault/";
       user = "vault";
@@ -121,7 +121,7 @@ in
 
     # Certs for metal-eli
     deployment.keys."metal-eli.cert" = {
-      keyCommand = [ "op" "inject" "-i" "../modules/vault/certs/metal-eli.cert" ];
+      keyCommand = [ "pass-cli" "inject" "-i" "../modules/vault/certs/metal-eli.cert" ];
 
       destDir = "/secrets/vault/";
       user = "vault";
@@ -131,7 +131,7 @@ in
       uploadAt = "pre-activation";
     };
     deployment.keys."metal-eli.key" = {
-      keyCommand = [ "op" "inject" "-i" "../modules/vault/certs/metal-eli.key" ];
+      keyCommand = [ "pass-cli" "inject" "-i" "../modules/vault/certs/metal-eli.key" ];
 
       destDir = "/secrets/vault/";
       user = "vault";
@@ -143,7 +143,7 @@ in
 
     # Certs for metal-100yan
     deployment.keys."metal-100yan.cert" = {
-      keyCommand = [ "op" "inject" "-i" "../modules/vault/certs/metal-100yan.cert" ];
+      keyCommand = [ "pass-cli" "inject" "-i" "../modules/vault/certs/metal-100yan.cert" ];
 
       destDir = "/secrets/vault/";
       user = "vault";
@@ -153,7 +153,7 @@ in
       uploadAt = "pre-activation";
     };
     deployment.keys."metal-100yan.key" = {
-      keyCommand = [ "op" "inject" "-i" "../modules/vault/certs/metal-100yan.key" ];
+      keyCommand = [ "pass-cli" "inject" "-i" "../modules/vault/certs/metal-100yan.key" ];
 
       destDir = "/secrets/vault/";
       user = "vault";
