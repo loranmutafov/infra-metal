@@ -13,7 +13,7 @@
           type = "EF02";
           priority = 1;
         };
-        ceph = {
+        bluestore = {
           size = "400G";
           # No `content`: leaves the partition raw for Ceph bluestore.
           # Ceph will own this device end-to-end.

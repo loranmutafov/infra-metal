@@ -16,7 +16,7 @@
   };
 
   kubeWorkerNode = {
-    enabled = false;
+    enabled = true;
     kubeletNodeIP = "100.88.172.51";
   };
 }
