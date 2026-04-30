@@ -28,9 +28,11 @@ in
       100.65.102.102  vmi431810.contaboserver.net vmi431810
     '';
 
-    # Allow Cilium Wireguard UDP port
+    # Allow Cilium Wireguard UDP port - 51871
     # https://docs.cilium.io/en/stable/operations/system_requirements/
     networking.firewall.allowedUDPPorts = [ 51871 ];
+    # Allow Rook Ceph MON ports - 6789 (legacy), 3300 (new)
+    networking.firewall.allowedTCPPorts = [ 6789 3300 ];
 
     # https://nixos.wiki/wiki/Kubernetes
     boot.kernelModules = [ "ceph" "rbd" "nbd" ];
