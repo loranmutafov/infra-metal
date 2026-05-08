@@ -76,6 +76,13 @@ in
       kubelet = {
         nodeIp = cfg.kubeletNodeIP;
 
+        # CoreDNS Service IP. The cluster was kubeadm-bootstrapped
+        # (10.96.0.10 is kubeadm's default); NixOS's k8s module would
+        # otherwise default to 10.0.0.254 via its addons.dns formula
+        # (<first-3-octets-of-serviceClusterIpRange>.254), which doesn't
+        # match this cluster's actual CoreDNS Service IP.
+        clusterDns = [ "10.96.0.10" ];
+
         # Don't manage CNI plugins via Nix - let Cilium install them
         cni.packages = lib.mkForce [];
 
